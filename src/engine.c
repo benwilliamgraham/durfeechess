@@ -18,13 +18,13 @@ typedef char Piece;
 
 const Piece NULL_PIECE = 0xFF;
 
-typedef enum { WHITE, BLACK } PieceColor;
+typedef enum { BLACK, WHITE } PieceColor;
 
-PieceColor get_piece_color(Piece piece) { return piece & 0b00001000; }
+PieceColor get_piece_color(Piece piece) { return (piece >> 3) & 0b1; }
 
 typedef enum { NONE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING } PieceType;
 
-PieceType get_piece_type(Piece piece) { return piece & 0b00000111; }
+PieceType get_piece_type(Piece piece) { return piece & 0b111; }
 
 Piece create_piece(PieceColor color, PieceType type) {
   return (color << 3) | type;
@@ -44,10 +44,14 @@ bool choord_eq(Coord a, Coord b) { return a.x == b.x && a.y == b.y; }
 
 Coord coord_add(Coord a, Coord b) { return (Coord){a.x + b.x, a.y + b.y}; }
 
+typedef struct {
+  bool status[2][2];
+} CastleStatus;
+
 struct {
   Piece squares[8][8];
   PieceColor turn;
-  bool can_castle[2][2];
+  CastleStatus can_castle;
   Coord en_passant;
 } BOARD;
 
@@ -60,21 +64,34 @@ void set_piece(Coord coord, Piece piece) {
 typedef enum { LEFT, RIGHT } Side;
 
 bool can_castle(PieceColor color, Side side) {
-  return BOARD.can_castle[color][side];
+  return BOARD.can_castle.status[color][side];
 }
 
 void set_can_castle(PieceColor color, Side side, bool can_castle) {
-  BOARD.can_castle[color][side] = can_castle;
+  BOARD.can_castle.status[color][side] = can_castle;
 }
 
 bool can_en_passant() { return BOARD.en_passant.x != -1; }
 
 typedef struct {
-  Coord to, from;
+  Coord from, to;
   Piece moved, target, promotion;
-  bool prev_can_castle;
+  CastleStatus prev_can_castle;
   Coord prev_en_passant;
 } Move;
+
+Move create_move(Coord from, Coord to, Piece moved, Piece target,
+                 Piece promotion) {
+  return (Move){
+      .from = from,
+      .to = to,
+      .moved = moved,
+      .target = target,
+      .promotion = promotion,
+      .prev_can_castle = BOARD.can_castle,
+      .prev_en_passant = BOARD.en_passant,
+  };
+}
 
 /* `move_buffer` is known to be large enough to hold all possible moves for a
  * given side (rounded up out of simplicity).
@@ -95,9 +112,38 @@ typedef struct {
  *   32 + 16 + 26 + 28 + 27 + 8 = 137
  */
 const int MAX_MOVES = 137;
-int get_legal_moves(Move *move_buffer) { return 0; }
+int get_legal_moves(Move *move_buffer) {
+  int num_legal_moves = 0;
+  /* Iterate over squares */
+  for (int y = 0; y < 8; y++) {
+    for (int x = 0; x < 8; x++) {
+      Coord from = {x, y};
+      Piece moved = get_piece(from);
+      if (moved == NULL_PIECE || get_piece_color(moved) != BOARD.turn)
+        continue;
 
-void make_move(Move *move) {}
+      /* Pawn handling */
+      if (get_piece_type(moved) == PAWN) {
+
+        int forward = (BOARD.turn == BLACK) ? -1 : 1;
+        /* Single square forward */
+        Coord single_fwd = {x, y + forward};
+        if (is_valid_coord(single_fwd) && get_piece(single_fwd) == NULL_PIECE) {
+          move_buffer[num_legal_moves++] =
+              create_move(from, single_fwd, moved, NULL_PIECE, NULL_PIECE);
+        }
+      }
+    }
+  }
+
+  return num_legal_moves;
+}
+
+void make_move(Move *move) {
+    set_piece(move->from, NULL_PIECE);
+    set_piece(move->to, move->moved);
+    BOARD.turn = (BOARD.turn == BLACK) ? WHITE : BLACK;
+}
 
 void unmake_move(Move *move) {}
 
@@ -120,6 +166,15 @@ void init_game() {
     set_piece((Coord){x, 6}, create_piece(BLACK, PAWN));
     set_piece((Coord){x, 7}, create_piece(BLACK, bottom_top_pieces[x]));
   }
+
+  set_can_castle(BLACK, LEFT, true);
+  set_can_castle(BLACK, RIGHT, true);
+  set_can_castle(WHITE, LEFT, true);
+  set_can_castle(WHITE, RIGHT, true);
+
+  BOARD.en_passant = NULL_COORD;
+
+  BOARD.turn = WHITE;
 
   /* Inform user of board setup */
   set_status_msg("Your turn...");
