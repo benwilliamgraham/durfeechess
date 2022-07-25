@@ -124,14 +124,21 @@ int get_legal_moves(Move *move_buffer) {
 
       /* Pawn handling */
       if (get_piece_type(moved) == PAWN) {
+        int forward = (BOARD.turn == BLACK) ? 1 : -1;
 
-        int forward = (BOARD.turn == BLACK) ? -1 : 1;
         /* Single square forward */
         Coord single_fwd = {x, y + forward};
-        if (is_valid_coord(single_fwd) && get_piece(single_fwd) == NULL_PIECE) {
+        if (is_valid_coord(single_fwd) && get_piece(single_fwd) == NULL_PIECE)
           move_buffer[num_legal_moves++] =
               create_move(from, single_fwd, moved, NULL_PIECE, NULL_PIECE);
-        }
+
+        /* Double square forward */
+        Coord double_fwd = {x, y + 2 * forward};
+        if (((BOARD.turn == BLACK && y == 1) ||
+             (BOARD.turn == WHITE && y == 6)) &&
+            get_piece(double_fwd) == NULL_PIECE)
+          move_buffer[num_legal_moves++] =
+              create_move(from, double_fwd, moved, NULL_PIECE, NULL_PIECE);
       }
     }
   }
@@ -140,9 +147,9 @@ int get_legal_moves(Move *move_buffer) {
 }
 
 void make_move(Move *move) {
-    set_piece(move->from, NULL_PIECE);
-    set_piece(move->to, move->moved);
-    BOARD.turn = (BOARD.turn == BLACK) ? WHITE : BLACK;
+  set_piece(move->from, NULL_PIECE);
+  set_piece(move->to, move->moved);
+  BOARD.turn = (BOARD.turn == BLACK) ? WHITE : BLACK;
 }
 
 void unmake_move(Move *move) {}
@@ -161,10 +168,10 @@ void init_game() {
                                     KING, BISHOP, KNIGHT, ROOK};
 
   for (int x = 0; x < 8; x++) {
-    set_piece((Coord){x, 0}, create_piece(WHITE, bottom_top_pieces[x]));
-    set_piece((Coord){x, 1}, create_piece(WHITE, PAWN));
-    set_piece((Coord){x, 6}, create_piece(BLACK, PAWN));
-    set_piece((Coord){x, 7}, create_piece(BLACK, bottom_top_pieces[x]));
+    set_piece((Coord){x, 0}, create_piece(BLACK, bottom_top_pieces[x]));
+    set_piece((Coord){x, 1}, create_piece(BLACK, PAWN));
+    set_piece((Coord){x, 6}, create_piece(WHITE, PAWN));
+    set_piece((Coord){x, 7}, create_piece(WHITE, bottom_top_pieces[x]));
   }
 
   set_can_castle(BLACK, LEFT, true);
