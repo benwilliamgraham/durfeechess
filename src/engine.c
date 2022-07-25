@@ -211,6 +211,64 @@ int get_legal_moves(Move *move_buffer) {
           }
         }
       }
+
+      /* Diagonal handling */
+      if (get_piece_type(moved) == BISHOP || get_piece_type(moved) == QUEEN) {
+        Coord diag_dirs[4] = {
+            {-1, -1},
+            {1, -1},
+            {-1, 1},
+            {1, 1},
+        };
+        for (int i = 0; i < 4; i++) {
+          Coord diag_dir = diag_dirs[i];
+          for (int dist = 1;; dist++) {
+            Coord diag_coord = {x + dist * diag_dir.x, y + dist * diag_dir.y};
+            if (!is_valid_coord(diag_coord))
+              break;
+            Piece target = get_piece(diag_coord);
+            if (target == NULL_PIECE) {
+              move_buffer[num_legal_moves++] =
+                  create_move(from, diag_coord, moved, target, NULL_PIECE);
+            } else {
+              if (get_piece_color(target) != BOARD.turn) {
+                move_buffer[num_legal_moves++] =
+                    create_move(from, diag_coord, moved, target, NULL_PIECE);
+              }
+              break;
+            }
+          }
+        }
+      }
+
+      /* horizontal/vertical handling */
+      if (get_piece_type(moved) == ROOK || get_piece_type(moved) == QUEEN) {
+        Coord hv_dirs[4] = {
+            {-1, 0},
+            {1, 0},
+            {0, -1},
+            {0, 1},
+        };
+        for (int i = 0; i < 4; i++) {
+          Coord hv_dir = hv_dirs[i];
+          for (int dist = 1;; dist++) {
+            Coord hv_coord = {x + dist * hv_dir.x, y + dist * hv_dir.y};
+            if (!is_valid_coord(hv_coord))
+              break;
+            Piece target = get_piece(hv_coord);
+            if (target == NULL_PIECE) {
+              move_buffer[num_legal_moves++] =
+                  create_move(from, hv_coord, moved, target, NULL_PIECE);
+            } else {
+              if (get_piece_color(target) != BOARD.turn) {
+                move_buffer[num_legal_moves++] =
+                    create_move(from, hv_coord, moved, target, NULL_PIECE);
+              }
+              break;
+            }
+          }
+        }
+      }
     }
   }
 
