@@ -12,6 +12,8 @@ $(DIST_DIR):
 
 $(WASM): $(DIST_DIR) $(SRC) $(INC)
 	clang \
+	  -Werror \
+	  -Wall \
 	  -O3 \
 	  -flto \
 	  --target=wasm32 \

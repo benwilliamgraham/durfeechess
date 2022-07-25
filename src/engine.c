@@ -14,15 +14,17 @@ void set_status_msg(const char *msg);
  * C: color
  * T: type
  */
-typedef char Piece;
+typedef int8_t Piece;
 
-const Piece NULL_PIECE = 0xFF;
+const Piece NULL_PIECE = -1;
 
 typedef enum { BLACK, WHITE } PieceColor;
 
 PieceColor get_piece_color(Piece piece) { return (piece >> 3) & 0b1; }
 
 typedef enum { NONE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING } PieceType;
+
+PieceType PROMOTION_TYPES[] = {QUEEN, ROOK, BISHOP, KNIGHT};
 
 PieceType get_piece_type(Piece piece) { return piece & 0b111; }
 
@@ -31,7 +33,7 @@ Piece create_piece(PieceColor color, PieceType type) {
 }
 
 typedef struct {
-  char x, y;
+  int8_t x, y;
 } Coord;
 
 const Coord NULL_COORD = {-1, -1};
@@ -128,17 +130,68 @@ int get_legal_moves(Move *move_buffer) {
 
         /* Single square forward */
         Coord single_fwd = {x, y + forward};
-        if (is_valid_coord(single_fwd) && get_piece(single_fwd) == NULL_PIECE)
-          move_buffer[num_legal_moves++] =
-              create_move(from, single_fwd, moved, NULL_PIECE, NULL_PIECE);
+        if (is_valid_coord(single_fwd) && get_piece(single_fwd) == NULL_PIECE) {
+          /* Check for promotion */
+          if (y == (BOARD.turn == BLACK ? 6 : 1)) {
+            for (int i = 0; i < 4; i++) {
+              move_buffer[num_legal_moves++] =
+                  create_move(from, single_fwd, moved, NULL_PIECE,
+                              create_piece(BOARD.turn, PROMOTION_TYPES[i]));
+            }
+          } else {
+            move_buffer[num_legal_moves++] =
+                create_move(from, single_fwd, moved, NULL_PIECE, NULL_PIECE);
+          }
+        }
 
         /* Double square forward */
         Coord double_fwd = {x, y + 2 * forward};
-        if (((BOARD.turn == BLACK && y == 1) ||
-             (BOARD.turn == WHITE && y == 6)) &&
+        if ((y == (BOARD.turn == BLACK ? 1 : 6)) &&
+            get_piece(single_fwd) == NULL_PIECE &&
             get_piece(double_fwd) == NULL_PIECE)
           move_buffer[num_legal_moves++] =
               create_move(from, double_fwd, moved, NULL_PIECE, NULL_PIECE);
+
+        /* Normal capture */
+        Coord capture_coords[2] = {
+            {x - 1, y + forward},
+            {x + 1, y + forward},
+        };
+        for (int i = 0; i < 2; i++) {
+          Coord capture_coord = capture_coords[i];
+          if (is_valid_coord(capture_coord) &&
+              get_piece(capture_coord) != NULL_PIECE &&
+              get_piece_color(get_piece(capture_coord)) != BOARD.turn) {
+            /* Check for promotion */
+            if (y == (BOARD.turn == BLACK ? 6 : 1)) {
+              for (int j = 0; j < 4; j++) {
+                move_buffer[num_legal_moves++] = create_move(
+                    from, capture_coord, moved, get_piece(capture_coord),
+                    create_piece(BOARD.turn, PROMOTION_TYPES[j]));
+              }
+            } else {
+              move_buffer[num_legal_moves++] =
+                  create_move(from, capture_coord, moved,
+                              get_piece(capture_coord), NULL_PIECE);
+            }
+          }
+        }
+
+        /* En passant capture */
+        Coord en_passant_coords[2] = {
+            {x - 1, y},
+            {x + 1, y},
+        };
+        if (can_en_passant()) {
+          Coord en_passant_coord = BOARD.en_passant;
+          for (int i = 0; i < 2; i++) {
+            if (choord_eq(en_passant_coord, en_passant_coords[i])) {
+              move_buffer[num_legal_moves++] =
+                  create_move(from, capture_coords[i], moved,
+                              get_piece(en_passant_coord), NULL_PIECE);
+            }
+          }
+        }
       }
     }
   }
@@ -147,8 +200,32 @@ int get_legal_moves(Move *move_buffer) {
 }
 
 void make_move(Move *move) {
+  /* Update previous square */
   set_piece(move->from, NULL_PIECE);
-  set_piece(move->to, move->moved);
+
+  /* Update target square */
+  if (get_piece_type(move->moved) == PAWN) {
+    /* Update en passant capture */
+    if (move->target != NULL_PIECE && get_piece_type(move->target) == PAWN &&
+        get_piece(move->to) == NULL_PIECE) {
+      set_piece(BOARD.en_passant, NULL_PIECE);
+    }
+
+    /* Update en passant status */
+    if (move->from.y - move->to.y == (BOARD.turn == BLACK ? -2 : 2)) {
+      BOARD.en_passant = move->to;
+    } else {
+      BOARD.en_passant = NULL_COORD;
+    }
+  }
+
+  if (move->promotion != NULL_PIECE) {
+    set_piece(move->to, move->promotion);
+  } else {
+    set_piece(move->to, move->moved);
+  }
+
+  /* Update turn */
   BOARD.turn = (BOARD.turn == BLACK) ? WHITE : BLACK;
 }
 
