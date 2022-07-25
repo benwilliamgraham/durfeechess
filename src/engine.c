@@ -193,6 +193,24 @@ int get_legal_moves(Move *move_buffer) {
           }
         }
       }
+
+      /* Knight handling */
+      else if (get_piece_type(moved) == KNIGHT) {
+        Coord knight_coords[8] = {
+            {x - 1, y - 2}, {x - 2, y - 1}, {x + 1, y - 2}, {x + 2, y - 1},
+            {x - 1, y + 2}, {x - 2, y + 1}, {x + 1, y + 2}, {x + 2, y + 1},
+        };
+        for (int i = 0; i < 8; i++) {
+          Coord knight_coord = knight_coords[i];
+          if (is_valid_coord(knight_coord)) {
+            Piece target = get_piece(knight_coord);
+            if (target == NULL_PIECE || get_piece_color(target) != BOARD.turn) {
+              move_buffer[num_legal_moves++] =
+                  create_move(from, knight_coord, moved, target, NULL_PIECE);
+            }
+          }
+        }
+      }
     }
   }
 
