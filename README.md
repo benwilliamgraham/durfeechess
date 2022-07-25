@@ -6,6 +6,6 @@ Play it here: [https://benwilliamgraham.github.io/durfeechess/](https://benwilli
 
 * Fully-featured chess engine
 
-* WASM binary smaller than 10KB
+* WASM binary smaller than 50KB
 
 * Custom piece svg graphics

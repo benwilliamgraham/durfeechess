@@ -212,60 +212,42 @@ int get_legal_moves(Move *move_buffer) {
         }
       }
 
-      /* Diagonal handling */
-      if (get_piece_type(moved) == BISHOP || get_piece_type(moved) == QUEEN) {
-        Coord diag_dirs[4] = {
+      /* Linear movement handling */
+      else {
+        Coord dirs[8] = {
+            /* Diagonals */
             {-1, -1},
             {1, -1},
             {-1, 1},
             {1, 1},
-        };
-        for (int i = 0; i < 4; i++) {
-          Coord diag_dir = diag_dirs[i];
-          for (int dist = 1;; dist++) {
-            Coord diag_coord = {x + dist * diag_dir.x, y + dist * diag_dir.y};
-            if (!is_valid_coord(diag_coord))
-              break;
-            Piece target = get_piece(diag_coord);
-            if (target == NULL_PIECE) {
-              move_buffer[num_legal_moves++] =
-                  create_move(from, diag_coord, moved, target, NULL_PIECE);
-            } else {
-              if (get_piece_color(target) != BOARD.turn) {
-                move_buffer[num_legal_moves++] =
-                    create_move(from, diag_coord, moved, target, NULL_PIECE);
-              }
-              break;
-            }
-          }
-        }
-      }
-
-      /* horizontal/vertical handling */
-      if (get_piece_type(moved) == ROOK || get_piece_type(moved) == QUEEN) {
-        Coord hv_dirs[4] = {
+            /* Horizontal */
             {-1, 0},
             {1, 0},
+            /* Vertical */
             {0, -1},
             {0, 1},
         };
-        for (int i = 0; i < 4; i++) {
-          Coord hv_dir = hv_dirs[i];
+        int start_dir = (get_piece_type(moved) == ROOK) ? 4 : 0;
+        int end_dir = (get_piece_type(moved) == BISHOP) ? 4 : 8;
+        for (int i = start_dir; i < end_dir; i++) {
+          Coord dir = dirs[i];
           for (int dist = 1;; dist++) {
-            Coord hv_coord = {x + dist * hv_dir.x, y + dist * hv_dir.y};
-            if (!is_valid_coord(hv_coord))
+            Coord to = {x + dist * dir.x, y + dist * dir.y};
+            if (!is_valid_coord(to))
               break;
-            Piece target = get_piece(hv_coord);
+            Piece target = get_piece(to);
             if (target == NULL_PIECE) {
               move_buffer[num_legal_moves++] =
-                  create_move(from, hv_coord, moved, target, NULL_PIECE);
+                  create_move(from, to, moved, target, NULL_PIECE);
             } else {
               if (get_piece_color(target) != BOARD.turn) {
                 move_buffer[num_legal_moves++] =
-                    create_move(from, hv_coord, moved, target, NULL_PIECE);
+                    create_move(from, to, moved, target, NULL_PIECE);
               }
               break;
             }
+            if (get_piece_type(moved) == KING)
+              break;
           }
         }
       }

@@ -14,7 +14,7 @@ $(WASM): $(DIST_DIR) $(SRC) $(INC)
 	clang \
 	  -Werror \
 	  -Wall \
-	  -O3 \
+	  -Ofast \
 	  -flto \
 	  --target=wasm32 \
 	  -nostdlib \
