@@ -24,7 +24,8 @@ PieceColor get_piece_color(Piece piece) { return (piece >> 3) & 0b1; }
 
 typedef enum { NONE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING } PieceType;
 
-PieceType PROMOTION_TYPES[] = {QUEEN, ROOK, BISHOP, KNIGHT};
+const PieceType PROMOTION_TYPES[] = {QUEEN, ROOK, BISHOP, KNIGHT};
+const PieceType *PROMOTION_TYPES_END = PROMOTION_TYPES + 4;
 
 PieceType get_piece_type(Piece piece) { return piece & 0b111; }
 
@@ -38,20 +39,53 @@ typedef struct {
 
 const Coord NULL_COORD = {-1, -1};
 
+const Coord PIECE_OFFSETS[] = {
+    /* Knight */
+    {-2, -1},
+    {-2, 1},
+    {-1, -2},
+    {-1, 2},
+    {1, -2},
+    {1, 2},
+    {2, -1},
+    {2, 1},
+    /* Diagonals */
+    {-1, -1},
+    {1, -1},
+    {-1, 1},
+    {1, 1},
+    /* Horizontal */
+    {-1, 0},
+    {1, 0},
+    /* Vertical */
+    {0, -1},
+    {0, 1},
+};
+
+const Coord *KNIGHT_OFFSETS = PIECE_OFFSETS,
+            *KNIGHT_OFFSETS_END = PIECE_OFFSETS + 8;
+const Coord *DIAG_OFFSETS = PIECE_OFFSETS + 8,
+            *DIAG_OFFSETS_END = PIECE_OFFSETS + 12;
+const Coord *HV_OFFSETS = PIECE_OFFSETS + 12,
+            *HV_OFFSETS_END = PIECE_OFFSETS + 16;
+
+#define BOARD_SIZE 8
+
+const int8_t PAWN_START_ROWS[] = {1, 6};
+
 bool is_valid_coord(Coord coord) {
-  return coord.x >= 0 && coord.x < 8 && coord.y >= 0 && coord.y < 8;
+  return coord.x >= 0 && coord.x < BOARD_SIZE && coord.y >= 0 &&
+         coord.y < BOARD_SIZE;
 }
 
 bool choord_eq(Coord a, Coord b) { return a.x == b.x && a.y == b.y; }
-
-Coord coord_add(Coord a, Coord b) { return (Coord){a.x + b.x, a.y + b.y}; }
 
 typedef struct {
   bool status[2][2];
 } CastleStatus;
 
 struct {
-  Piece squares[8][8];
+  Piece squares[BOARD_SIZE][BOARD_SIZE];
   PieceColor turn;
   CastleStatus can_castle;
   Coord en_passant;
@@ -117,8 +151,8 @@ const int MAX_MOVES = 137;
 int get_legal_moves(Move *move_buffer) {
   int num_legal_moves = 0;
   /* Iterate over squares */
-  for (int y = 0; y < 8; y++) {
-    for (int x = 0; x < 8; x++) {
+  for (int y = 0; y < BOARD_SIZE; y++) {
+    for (int x = 0; x < BOARD_SIZE; x++) {
       Coord from = {x, y};
       Piece moved = get_piece(from);
       if (moved == NULL_PIECE || get_piece_color(moved) != BOARD.turn)
@@ -132,11 +166,12 @@ int get_legal_moves(Move *move_buffer) {
         Coord single_fwd = {x, y + forward};
         if (is_valid_coord(single_fwd) && get_piece(single_fwd) == NULL_PIECE) {
           /* Check for promotion */
-          if (y == (BOARD.turn == BLACK ? 6 : 1)) {
-            for (int i = 0; i < 4; i++) {
+          if (y == PAWN_START_ROWS[BOARD.turn == BLACK ? WHITE : BLACK]) {
+            for (const PieceType *promotion_type = PROMOTION_TYPES;
+                 promotion_type < PROMOTION_TYPES_END; promotion_type++) {
               move_buffer[num_legal_moves++] =
                   create_move(from, single_fwd, moved, NULL_PIECE,
-                              create_piece(BOARD.turn, PROMOTION_TYPES[i]));
+                              create_piece(BOARD.turn, *promotion_type));
             }
           } else {
             move_buffer[num_legal_moves++] =
@@ -146,7 +181,7 @@ int get_legal_moves(Move *move_buffer) {
 
         /* Double square forward */
         Coord double_fwd = {x, y + 2 * forward};
-        if ((y == (BOARD.turn == BLACK ? 1 : 6)) &&
+        if ((y == PAWN_START_ROWS[BOARD.turn]) &&
             get_piece(single_fwd) == NULL_PIECE &&
             get_piece(double_fwd) == NULL_PIECE)
           move_buffer[num_legal_moves++] =
@@ -163,11 +198,12 @@ int get_legal_moves(Move *move_buffer) {
               get_piece(capture_coord) != NULL_PIECE &&
               get_piece_color(get_piece(capture_coord)) != BOARD.turn) {
             /* Check for promotion */
-            if (y == (BOARD.turn == BLACK ? 6 : 1)) {
-              for (int j = 0; j < 4; j++) {
+            if (y == PAWN_START_ROWS[BOARD.turn == BLACK ? WHITE : BLACK]) {
+              for (const PieceType *promotion_type = PROMOTION_TYPES;
+                   promotion_type < PROMOTION_TYPES_END; promotion_type++) {
                 move_buffer[num_legal_moves++] = create_move(
                     from, capture_coord, moved, get_piece(capture_coord),
-                    create_piece(BOARD.turn, PROMOTION_TYPES[j]));
+                    create_piece(BOARD.turn, *promotion_type));
               }
             } else {
               move_buffer[num_legal_moves++] =
@@ -196,12 +232,9 @@ int get_legal_moves(Move *move_buffer) {
 
       /* Knight handling */
       else if (get_piece_type(moved) == KNIGHT) {
-        Coord knight_coords[8] = {
-            {x - 1, y - 2}, {x - 2, y - 1}, {x + 1, y - 2}, {x + 2, y - 1},
-            {x - 1, y + 2}, {x - 2, y + 1}, {x + 1, y + 2}, {x + 2, y + 1},
-        };
-        for (int i = 0; i < 8; i++) {
-          Coord knight_coord = knight_coords[i];
+        for (const Coord *knight_move = KNIGHT_OFFSETS;
+             knight_move < KNIGHT_OFFSETS_END; knight_move++) {
+          Coord knight_coord = {x + knight_move->x, y + knight_move->y};
           if (is_valid_coord(knight_coord)) {
             Piece target = get_piece(knight_coord);
             if (target == NULL_PIECE || get_piece_color(target) != BOARD.turn) {
@@ -214,25 +247,13 @@ int get_legal_moves(Move *move_buffer) {
 
       /* Linear movement handling */
       else {
-        Coord dirs[8] = {
-            /* Diagonals */
-            {-1, -1},
-            {1, -1},
-            {-1, 1},
-            {1, 1},
-            /* Horizontal */
-            {-1, 0},
-            {1, 0},
-            /* Vertical */
-            {0, -1},
-            {0, 1},
-        };
-        int start_dir = (get_piece_type(moved) == ROOK) ? 4 : 0;
-        int end_dir = (get_piece_type(moved) == BISHOP) ? 4 : 8;
-        for (int i = start_dir; i < end_dir; i++) {
-          Coord dir = dirs[i];
+        const Coord *start_coord =
+            get_piece_type(moved) == ROOK ? HV_OFFSETS : DIAG_OFFSETS;
+        const Coord *end_coord =
+            get_piece_type(moved) == BISHOP ? DIAG_OFFSETS_END : HV_OFFSETS_END;
+        for (const Coord *dir = start_coord; dir < end_coord; dir++) {
           for (int dist = 1;; dist++) {
-            Coord to = {x + dist * dir.x, y + dist * dir.y};
+            Coord to = {x + dist * dir->x, y + dist * dir->y};
             if (!is_valid_coord(to))
               break;
             Piece target = get_piece(to);
@@ -293,20 +314,21 @@ void unmake_move(Move *move) {}
 
 void init_game() {
   /* Initialize board */
-  for (int y = 2; y < 6; y++) {
-    for (int x = 0; x < 8; x++) {
+  for (int y = 2; y < BOARD_SIZE - 2; y++) {
+    for (int x = 0; x < BOARD_SIZE; x++) {
       set_piece((Coord){x, y}, NULL_PIECE);
     }
   }
 
-  PieceType bottom_top_pieces[8] = {ROOK, KNIGHT, BISHOP, QUEEN,
-                                    KING, BISHOP, KNIGHT, ROOK};
+  PieceType bottom_top_pieces[] = {ROOK, KNIGHT, BISHOP, QUEEN,
+                                   KING, BISHOP, KNIGHT, ROOK};
 
-  for (int x = 0; x < 8; x++) {
+  for (int x = 0; x < BOARD_SIZE; x++) {
     set_piece((Coord){x, 0}, create_piece(BLACK, bottom_top_pieces[x]));
-    set_piece((Coord){x, 1}, create_piece(BLACK, PAWN));
-    set_piece((Coord){x, 6}, create_piece(WHITE, PAWN));
-    set_piece((Coord){x, 7}, create_piece(WHITE, bottom_top_pieces[x]));
+    set_piece((Coord){x, PAWN_START_ROWS[BLACK]}, create_piece(BLACK, PAWN));
+    set_piece((Coord){x, PAWN_START_ROWS[WHITE]}, create_piece(WHITE, PAWN));
+    set_piece((Coord){x, BOARD_SIZE - 1},
+              create_piece(WHITE, bottom_top_pieces[x]));
   }
 
   set_can_castle(BLACK, LEFT, true);
