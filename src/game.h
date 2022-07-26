@@ -12,6 +12,8 @@ typedef enum { BLACK, WHITE } PieceColor;
 
 PieceColor get_piece_color(Piece piece);
 
+PieceColor get_opposite_color(PieceColor color);
+
 typedef enum { NONE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING } PieceType;
 
 PieceType get_piece_type(Piece piece);
@@ -39,6 +41,7 @@ extern struct {
   PieceColor turn;
   CastleStatus can_castle;
   Coord en_passant;
+  Coord king_pos[2];
 } BOARD;
 
 void init_board();
@@ -47,7 +50,7 @@ Piece get_piece(Coord coord);
 
 void set_piece(Coord coord, Piece piece);
 
-typedef enum { LEFT, RIGHT } Side;
+typedef enum { QUEEN_SIDE, KING_SIDE } Side;
 
 bool can_castle(PieceColor color, Side side);
 
@@ -84,6 +87,9 @@ Move create_move(Coord from, Coord to, Piece moved, Piece target,
  *   32 + 16 + 26 + 28 + 27 + 8 = 137
  */
 #define MAX_MOVES 137
+
+/* Note: this function does not check for en passant. */
+bool is_square_attacked(Coord coord, PieceColor attack_color);
 
 int get_legal_moves(Move *move_buffer);
 

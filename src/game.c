@@ -7,7 +7,19 @@ const Coord NULL_COORD = {-1, -1};
 const Piece NULL_PIECE = -1;
 
 /* Internal constants */
+const int8_t BACK_ROWS[] = {0, 7};
+
 const int8_t PAWN_START_ROWS[] = {1, 6};
+
+const int8_t FWD_DIRS[] = {1, -1};
+
+const int8_t ROOK_START_COLS[] = {0, 7};
+
+const int8_t ROOK_CASTLE_COLS[] = {3, 5};
+
+const int8_t KING_START_COL = 4;
+
+const int8_t KING_CASTLE_COLS[] = {2, 6};
 
 const Coord PIECE_OFFSETS[] = {
     /* Knight */
@@ -34,12 +46,18 @@ const Coord PIECE_OFFSETS[] = {
 
 const Coord *KNIGHT_OFFSETS = PIECE_OFFSETS,
             *KNIGHT_OFFSETS_END = PIECE_OFFSETS + 8;
+
+const Coord *LINEAR_OFFSETS = PIECE_OFFSETS + 8,
+            *LINEAR_OFFSETS_END = PIECE_OFFSETS + 16;
+
 const Coord *DIAG_OFFSETS = PIECE_OFFSETS + 8,
             *DIAG_OFFSETS_END = PIECE_OFFSETS + 12;
+
 const Coord *HV_OFFSETS = PIECE_OFFSETS + 12,
             *HV_OFFSETS_END = PIECE_OFFSETS + 16;
 
 const PieceType PROMOTION_TYPES[] = {QUEEN, ROOK, BISHOP, KNIGHT};
+
 const PieceType *PROMOTION_TYPES_END = PROMOTION_TYPES + 4;
 
 /* Piece implementation
@@ -50,6 +68,10 @@ const PieceType *PROMOTION_TYPES_END = PROMOTION_TYPES + 4;
  */
 
 PieceColor get_piece_color(Piece piece) { return (piece >> 3) & 0b1; }
+
+PieceColor get_opposite_color(PieceColor color) {
+  return color == BLACK ? WHITE : BLACK;
+}
 
 PieceType get_piece_type(Piece piece) { return piece & 0b111; }
 
@@ -120,15 +142,75 @@ void init_board() {
               create_piece(WHITE, bottom_top_pieces[x]));
   }
 
-  set_can_castle(BLACK, LEFT, true);
-  set_can_castle(BLACK, RIGHT, true);
-  set_can_castle(WHITE, LEFT, true);
-  set_can_castle(WHITE, RIGHT, true);
+  set_can_castle(BLACK, QUEEN_SIDE, true);
+  set_can_castle(BLACK, KING_SIDE, true);
+  set_can_castle(WHITE, QUEEN_SIDE, true);
+  set_can_castle(WHITE, KING_SIDE, true);
+
+  BOARD.king_pos[BLACK] = (Coord){KING_START_COL, BACK_ROWS[BLACK]};
+  BOARD.king_pos[WHITE] = (Coord){KING_START_COL, BACK_ROWS[WHITE]};
 
   BOARD.en_passant = NULL_COORD;
 
   BOARD.turn = WHITE;
 };
+
+bool is_square_attacked(Coord coord, PieceColor attack_color) {
+  PieceColor under_attack_color = get_opposite_color(attack_color);
+  // Check pawn attack
+  Coord pawn_attack_coords[] = {
+      {coord.x - 1, coord.y + FWD_DIRS[under_attack_color]},
+      {coord.x + 1, coord.y + FWD_DIRS[under_attack_color]},
+  };
+  for (int i = 0; i < 2; i++) {
+    if (is_valid_coord(pawn_attack_coords[i]) &&
+        get_piece(pawn_attack_coords[i]) == create_piece(attack_color, PAWN)) {
+      return true;
+    }
+  }
+
+  // Check knight attack
+  for (const Coord *offset = KNIGHT_OFFSETS; offset < KNIGHT_OFFSETS_END;
+       offset++) {
+    Coord knight_coord = (Coord){coord.x + offset->x, coord.y + offset->y};
+    if (is_valid_coord(knight_coord) &&
+        get_piece(knight_coord) == create_piece(attack_color, KNIGHT)) {
+      return true;
+    }
+  }
+
+  // Check linear attack
+  for (const Coord *offset = LINEAR_OFFSETS; offset < LINEAR_OFFSETS_END;
+       offset++) {
+    for (int dist = 1;; dist++) {
+      Coord square =
+          (Coord){coord.x + offset->x * dist, coord.y + offset->y * dist};
+      if (!is_valid_coord(square)) {
+        break;
+      }
+      Piece piece = get_piece(square);
+      if (piece != NULL_PIECE) {
+        if (get_piece_color(piece) == attack_color &&
+            (
+                /* Bishop */
+                (get_piece_type(piece) == BISHOP && offset >= DIAG_OFFSETS &&
+                 offset < DIAG_OFFSETS_END) ||
+                /* Rook */
+                (get_piece_type(piece) == ROOK && offset >= HV_OFFSETS &&
+                 offset < HV_OFFSETS_END) ||
+                /* Queen */
+                get_piece_type(piece) == QUEEN ||
+                /* King */
+                (get_piece_type(piece) == KING && dist == 1))) {
+          return true;
+        }
+        break;
+      }
+    }
+  }
+
+  return false;
+}
 
 int get_legal_moves(Move *move_buffer) {
   int num_legal_moves = 0;
@@ -142,13 +224,13 @@ int get_legal_moves(Move *move_buffer) {
 
       /* Pawn handling */
       if (get_piece_type(moved) == PAWN) {
-        int forward = (BOARD.turn == BLACK) ? 1 : -1;
+        int forward = FWD_DIRS[get_piece_color(moved)];
 
         /* Single square forward */
         Coord single_fwd = {x, y + forward};
         if (is_valid_coord(single_fwd) && get_piece(single_fwd) == NULL_PIECE) {
           /* Check for promotion */
-          if (y == PAWN_START_ROWS[BOARD.turn == BLACK ? WHITE : BLACK]) {
+          if (y == PAWN_START_ROWS[get_opposite_color(BOARD.turn)]) {
             for (const PieceType *promotion_type = PROMOTION_TYPES;
                  promotion_type < PROMOTION_TYPES_END; promotion_type++) {
               move_buffer[num_legal_moves++] =
@@ -180,7 +262,7 @@ int get_legal_moves(Move *move_buffer) {
               get_piece(capture_coord) != NULL_PIECE &&
               get_piece_color(get_piece(capture_coord)) != BOARD.turn) {
             /* Check for promotion */
-            if (y == PAWN_START_ROWS[BOARD.turn == BLACK ? WHITE : BLACK]) {
+            if (y == PAWN_START_ROWS[get_opposite_color(BOARD.turn)]) {
               for (const PieceType *promotion_type = PROMOTION_TYPES;
                    promotion_type < PROMOTION_TYPES_END; promotion_type++) {
                 move_buffer[num_legal_moves++] = create_move(
@@ -230,9 +312,10 @@ int get_legal_moves(Move *move_buffer) {
       /* Linear movement handling */
       else {
         const Coord *start_coord =
-            get_piece_type(moved) == ROOK ? HV_OFFSETS : DIAG_OFFSETS;
-        const Coord *end_coord =
-            get_piece_type(moved) == BISHOP ? DIAG_OFFSETS_END : HV_OFFSETS_END;
+            get_piece_type(moved) == ROOK ? HV_OFFSETS : LINEAR_OFFSETS;
+        const Coord *end_coord = get_piece_type(moved) == BISHOP
+                                     ? DIAG_OFFSETS_END
+                                     : LINEAR_OFFSETS_END;
         for (const Coord *dir = start_coord; dir < end_coord; dir++) {
           for (int dist = 1;; dist++) {
             Coord to = {x + dist * dir->x, y + dist * dir->y};
@@ -252,6 +335,45 @@ int get_legal_moves(Move *move_buffer) {
             if (get_piece_type(moved) == KING)
               break;
           }
+        }
+      }
+
+      /* Castling */
+      if (get_piece_type(moved) == KING) {
+        if (can_castle(BOARD.turn, QUEEN_SIDE)) {
+          /* Check that all of the squares in between are empty */
+          for (int i = ROOK_START_COLS[QUEEN_SIDE] + 1; i < x; i++) {
+            if (get_piece((Coord){i, y}) != NULL_PIECE)
+              goto cant_castle_queen_side;
+          }
+          /* Check that the king isn't in check and won't go into check */
+          for (int i = KING_CASTLE_COLS[QUEEN_SIDE]; i <= x; i++) {
+            if (is_square_attacked((Coord){i, y},
+                                   get_opposite_color(BOARD.turn)))
+              goto cant_castle_queen_side;
+          }
+          move_buffer[num_legal_moves++] =
+              create_move(from, (Coord){KING_CASTLE_COLS[QUEEN_SIDE], y}, moved,
+                          NULL_PIECE, NULL_PIECE);
+        cant_castle_queen_side:;
+        }
+
+        if (can_castle(BOARD.turn, KING_SIDE)) {
+          /* Check that all of the squares in between are empty */
+          for (int i = x + 1; i < ROOK_START_COLS[KING_SIDE]; i++) {
+            if (get_piece((Coord){i, y}) != NULL_PIECE)
+              goto cant_castle_king_side;
+          }
+          /* Check that the king isn't in check and won't go into check */
+          for (int i = x; x <= KING_CASTLE_COLS[KING_SIDE]; i++) {
+            if (is_square_attacked((Coord){i, y},
+                                   get_opposite_color(BOARD.turn)))
+              goto cant_castle_king_side;
+          }
+          move_buffer[num_legal_moves++] =
+              create_move(from, (Coord){KING_CASTLE_COLS[KING_SIDE], y}, moved,
+                          NULL_PIECE, NULL_PIECE);
+        cant_castle_king_side:;
         }
       }
     }
@@ -284,6 +406,33 @@ void make_move(Move *move) {
     set_piece(move->to, move->promotion);
   } else {
     set_piece(move->to, move->moved);
+  }
+
+  /* Check for castling */
+  if (get_piece_type(move->moved) == KING) {
+    BOARD.king_pos[BOARD.turn] = move->to;
+    set_can_castle(BOARD.turn, QUEEN_SIDE, false);
+    set_can_castle(BOARD.turn, KING_SIDE, false);
+
+    if (move->from.x == KING_START_COL) {
+      /* Move rook */
+      for (Side side = QUEEN_SIDE; side <= KING_SIDE; side++) {
+        if (move->to.x == KING_CASTLE_COLS[side]) {
+          set_piece((Coord){ROOK_START_COLS[side], move->from.y}, NULL_PIECE);
+          set_piece((Coord){ROOK_CASTLE_COLS[side], move->from.y},
+                    create_piece(BOARD.turn, ROOK));
+        }
+      }
+    }
+  }
+  if (get_piece_type(move->moved) == ROOK) {
+    if (move->from.x == ROOK_START_COLS[QUEEN_SIDE] &&
+        move->from.y == BACK_ROWS[BOARD.turn]) {
+      set_can_castle(BOARD.turn, QUEEN_SIDE, false);
+    } else if (move->from.x == ROOK_START_COLS[KING_SIDE] &&
+               move->from.y == BACK_ROWS[BOARD.turn]) {
+      set_can_castle(BOARD.turn, KING_SIDE, false);
+    }
   }
 
   /* Update turn */
