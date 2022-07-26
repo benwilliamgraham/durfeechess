@@ -415,9 +415,9 @@ void make_move(Move *move) {
     set_can_castle(BOARD.turn, KING_SIDE, false);
 
     if (move->from.x == KING_START_COL) {
-      /* Move rook */
       for (Side side = QUEEN_SIDE; side <= KING_SIDE; side++) {
         if (move->to.x == KING_CASTLE_COLS[side]) {
+          /* Move rook */
           set_piece((Coord){ROOK_START_COLS[side], move->from.y}, NULL_PIECE);
           set_piece((Coord){ROOK_CASTLE_COLS[side], move->from.y},
                     create_piece(BOARD.turn, ROOK));
@@ -426,17 +426,50 @@ void make_move(Move *move) {
     }
   }
   if (get_piece_type(move->moved) == ROOK) {
-    if (move->from.x == ROOK_START_COLS[QUEEN_SIDE] &&
-        move->from.y == BACK_ROWS[BOARD.turn]) {
-      set_can_castle(BOARD.turn, QUEEN_SIDE, false);
-    } else if (move->from.x == ROOK_START_COLS[KING_SIDE] &&
-               move->from.y == BACK_ROWS[BOARD.turn]) {
-      set_can_castle(BOARD.turn, KING_SIDE, false);
+    for (Side side = QUEEN_SIDE; side <= KING_SIDE; side++) {
+      if (move->from.x == ROOK_START_COLS[side] &&
+          move->from.y == BACK_ROWS[BOARD.turn]) {
+        set_can_castle(BOARD.turn, side, false);
+      }
     }
   }
 
   /* Update turn */
-  BOARD.turn = (BOARD.turn == BLACK) ? WHITE : BLACK;
+  BOARD.turn = get_opposite_color(BOARD.turn);
 }
 
-void unmake_move(Move *move) {}
+void unmake_move(Move *move) {
+  /* Update turn back */
+  BOARD.turn = get_opposite_color(BOARD.turn);
+
+  /* Update previous square */
+  set_piece(move->from, move->moved);
+
+  /* Update target square */
+  if (get_piece_type(move->moved) == PAWN && move->target != NULL_PIECE &&
+      get_piece_type(move->target) == PAWN &&
+      get_piece(move->to) == NULL_PIECE) {
+    set_piece(BOARD.en_passant, move->target);
+  } else {
+    set_piece(move->to, move->target);
+  }
+
+  /* Check for castling */
+  if (get_piece_type(move->moved) == KING) {
+    BOARD.king_pos[BOARD.turn] = move->from;
+    if (move->from.x == KING_START_COL) {
+      for (Side side = QUEEN_SIDE; side <= KING_SIDE; side++) {
+        if (move->to.x == KING_CASTLE_COLS[side]) {
+          /* Move rook */
+          set_piece((Coord){ROOK_CASTLE_COLS[side], move->from.y}, NULL_PIECE);
+          set_piece((Coord){ROOK_START_COLS[side], move->from.y},
+                    create_piece(BOARD.turn, ROOK));
+        }
+      }
+    }
+  }
+
+  /* Update saved info */
+  BOARD.en_passant = move->prev_en_passant;
+  BOARD.can_castle = move->prev_can_castle;
+}
